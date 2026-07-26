@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s --max-time 20 \"https://testnet.arcscan.app/api/v2/main-page/transactions\")",
+      "Bash(python -c ' *)",
+      "Bash(curl -s --max-time 15 https://testnet.arcscan.app/api/v2/tokens/0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a)",
+      "Bash(curl -s --max-time 20 https://testnet.arcscan.app/api/v2/tokens/0x3600000000000000000000000000000000000000/holders)",
+      "WebSearch"
+    ]
+  }
+}

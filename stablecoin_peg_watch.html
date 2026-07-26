@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ArcPulse: Stablecoin & Arc Chain Dashboard</title>
+<style>
+  /* ---- scoped to #peg-watch-root so it can be dropped into any page ---- */
+  #peg-watch-root {
+    --bg: #0a1220;
+    --panel: #101b2e;
+    --panel-2: #16233b;
+    --line: #1c2b46;
+    --text: #e8ecf3;
+    --muted: #7c8aa5;
+    --accent: #d4af37;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --euro: #60a5fa;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  #peg-watch-root * { box-sizing: border-box; margin: 0; padding: 0; }
+  #peg-watch-root :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  /* terminal/monospace feel for data + labels (headings stay in the sans stack) */
+  #peg-watch-root .sub, #peg-watch-root .tab, #peg-watch-root .statusbar, #peg-watch-root .arc-badge,
+  #peg-watch-root .card, #peg-watch-root .gas-hero, #peg-watch-root .feed, #peg-watch-root .toggle,
+  #peg-watch-root .whale-bar, #peg-watch-root .pager, #peg-watch-root .tip, #peg-watch-root .foot,
+  #peg-watch-root .peg-label, #peg-watch-root .peg-note, #peg-watch-root .spark .b::after {
+    font-family: ui-monospace, SFMono-Regular, Menlo, "Cascadia Code", Consolas, monospace;
+  }
+
+  #peg-watch-root .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  #peg-watch-root header.app-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  #peg-watch-root header.app-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+  #peg-watch-root header.app-head .arc-badge {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px;
+    background: linear-gradient(90deg, var(--accent), var(--euro)); color: #fff;
+    padding: 3px 9px; border-radius: 999px;
+  }
+  #peg-watch-root .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; max-width: 720px; line-height: 1.5; }
+
+  /* tabs */
+  #peg-watch-root .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; flex-wrap: wrap; }
+  #peg-watch-root .tab {
+    background: none; border: none; color: var(--muted); font-size: 14px; font-weight: 600;
+    padding: 11px 16px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    font-family: inherit; transition: color .15s; display: flex; align-items: center; gap: 7px;
+  }
+  #peg-watch-root .tab:hover { color: var(--text); }
+  #peg-watch-root .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  #peg-watch-root .tab .tab-ico { font-size: 15px; }
+
+  #peg-watch-root .view { display: none; }
+  #peg-watch-root .view.active { display: block; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* status + controls bar */
+  #peg-watch-root .statusbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  #peg-watch-root .status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; min-width: 0; }
+  #peg-watch-root .status .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #peg-watch-root .controls { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  #peg-watch-root .updated { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #peg-watch-root .btn { background: var(--panel); border: 1px solid var(--line); color: var(--text); font-family: inherit;
+    font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background .15s, border-color .15s; }
+  #peg-watch-root .btn:hover { background: var(--panel-2); border-color: var(--accent); }
+  #peg-watch-root .btn .ico { display: inline-block; }
+  #peg-watch-root .btn.spin .ico { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #peg-watch-root .auto-lbl { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+  #peg-watch-root .auto-lbl input { accent-color: var(--accent); cursor: pointer; }
+
+  #peg-watch-root .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  #peg-watch-root .dot.live { background: var(--green); animation: pulse 2s infinite; }
+  #peg-watch-root .dot.demo { background: var(--amber); }
+  #peg-watch-root .dot.err { background: var(--red); }
+  #peg-watch-root .dot.load { background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(53,208,127,.5);} 70%{ box-shadow: 0 0 0 7px rgba(53,208,127,0);} 100%{ box-shadow: 0 0 0 0 rgba(53,208,127,0);} }
+  #peg-watch-root .demo-tag { background: var(--amber); color: #241a00; font-weight: 700; font-size: 10px; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  #peg-watch-root .retry { margin-left: 8px; }
+
+  /* skeleton shimmer */
+  #peg-watch-root .sk { position: relative; overflow: hidden; background: var(--panel-2); border-radius: 8px; }
+  #peg-watch-root .sk::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent); animation: shimmer 1.3s infinite; }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
+
+  /* bubble canvas */
+  #peg-watch-root .bubble-canvas { position: relative; width: 100%; height: 440px; background: linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px) 0 0/100% 40px, linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px) 0 0/40px 100%, radial-gradient(circle at 50% 45%, #12203a 0%, #0a1220 78%); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  #peg-watch-root .peg-line { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: linear-gradient(90deg, transparent, var(--accent) 8%, var(--accent) 92%, transparent); opacity: .55; }
+  #peg-watch-root .peg-label { position: absolute; left: 10px; top: calc(50% + 6px); font-size: 10px; color: var(--accent); letter-spacing: .06em; opacity: .9; }
+  #peg-watch-root .peg-note { position: absolute; left: 10px; font-size: 9px; color: var(--muted); letter-spacing: .04em; }
+  #peg-watch-root .peg-note.up { top: calc(50% - 30px); }
+  #peg-watch-root .peg-note.down { top: calc(50% + 22px); }
+  #peg-watch-root .bubble { position: absolute; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; border: 1.5px solid rgba(255,255,255,.15); animation: pw-bob 6s ease-in-out infinite; }
+  #peg-watch-root .bubble.anim { transition: left .5s cubic-bezier(.22,1,.36,1), top .5s cubic-bezier(.22,1,.36,1), transform .15s; }
+  #peg-watch-root .bubble:hover { transform: scale(1.06); z-index: 5; filter: brightness(1.15); }
+  #peg-watch-root .bubble .sym { font-weight: 700; font-size: 13px; line-height: 1; }
+  #peg-watch-root .bubble .px { font-size: 10px; opacity: .85; margin-top: 2px; }
+  @keyframes pw-bob { 0%, 100% { margin-top: 0; } 50% { margin-top: -6px; } }
+  #peg-watch-root .tip { position: absolute; z-index: 20; pointer-events: none; background: #071020; border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s; max-width: 240px; }
+  #peg-watch-root .tip.show { opacity: 1; transform: none; }
+  #peg-watch-root .tip .t-name { font-weight: 700; margin-bottom: 4px; }
+  #peg-watch-root .tip .t-row { color: var(--muted); display: flex; justify-content: space-between; gap: 16px; }
+  #peg-watch-root .tip .t-row b { color: var(--text); font-weight: 600; }
+
+  /* stat grid */
+  #peg-watch-root .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  #peg-watch-root .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  #peg-watch-root .card .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  #peg-watch-root .card .v { font-size: 26px; font-weight: 700; margin-top: 6px; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+  #peg-watch-root .card .vs { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  #peg-watch-root .sk-card { height: 92px; }
+
+  /* gas hero */
+  #peg-watch-root .gas-hero { background: radial-gradient(ellipse at top, rgba(212,175,55,.1), transparent 70%), var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 28px; text-align: center; margin-bottom: 18px; }
+  #peg-watch-root .gas-hero .k { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+  #peg-watch-root .gas-hero .big { font-size: 54px; font-weight: 800; letter-spacing: -1px; margin: 8px 0 2px; color: var(--accent); text-shadow: 0 0 30px rgba(212,175,55,.35); font-variant-numeric: tabular-nums; }
+  #peg-watch-root .gas-hero .note { color: var(--muted); font-size: 12px; max-width: 460px; margin: 6px auto 0; line-height: 1.5; }
+
+  /* feed */
+  #peg-watch-root .feed { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  #peg-watch-root .feed h3 { font-size: 13px; padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  #peg-watch-root .feed-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--panel-2); font-size: 13px; text-decoration: none; color: inherit; }
+  #peg-watch-root .feed-row.new { animation: slidein .4s ease; }
+  @keyframes slidein { from { opacity: 0; transform: translateX(-8px); background: rgba(79,156,255,.08); } to { opacity: 1; transform: none; } }
+  #peg-watch-root .feed-row:last-child { border-bottom: none; }
+  #peg-watch-root .feed-row:hover { background: var(--panel-2); }
+  #peg-watch-root .feed-row .hash { color: var(--accent); font-family: ui-monospace, monospace; font-size: 12px; }
+  #peg-watch-root .feed-row .method { color: var(--muted); font-size: 11px; background: var(--panel-2); padding: 2px 7px; border-radius: 5px; }
+  #peg-watch-root .feed-row:hover .method { background: var(--bg); }
+  #peg-watch-root .feed-row .fee { margin-left: auto; font-weight: 700; color: var(--green); font-variant-numeric: tabular-nums; }
+  #peg-watch-root .feed-row .ts { margin-left: auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  #peg-watch-root .feed-row .ts + .fee { margin-left: 12px; }
+  #peg-watch-root .feed-row.fail .fee { color: var(--red); }
+  #peg-watch-root .feed-row.fail .hash::before { content: "✕ "; color: var(--red); }
+
+  /* whale bars */
+  #peg-watch-root .toggle-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  #peg-watch-root .toggle { background: var(--panel); border: 1px solid var(--line); color: var(--muted); padding: 7px 16px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  #peg-watch-root .toggle[aria-pressed="true"] { color: #fff; border-color: var(--accent); background: var(--panel-2); }
+  #peg-watch-root .toggle .swatch { width: 10px; height: 10px; border-radius: 3px; }
+  #peg-watch-root .whale-bar { margin-bottom: 10px; text-decoration: none; color: inherit; display: block; }
+  #peg-watch-root .whale-bar .lbl { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+  #peg-watch-root .whale-bar .lbl .addr { font-family: ui-monospace, monospace; color: var(--muted); font-size: 12px; }
+  #peg-watch-root .whale-bar:hover .lbl .addr { color: var(--accent); }
+  #peg-watch-root .whale-bar .lbl .pct { font-variant-numeric: tabular-nums; }
+  #peg-watch-root .whale-bar .track { height: 22px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  #peg-watch-root .whale-bar .fill { height: 100%; border-radius: 6px; transition: width .6s cubic-bezier(.22,1,.36,1); }
+  #peg-watch-root .whale-bar .rank { color: var(--accent); margin-right: 7px; opacity: .85; }
+  #peg-watch-root .pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; }
+  #peg-watch-root .pageno { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #peg-watch-root .pgsize-wrap { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; }
+  #peg-watch-root .pgsize { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-family: inherit; font-size: 12px; cursor: pointer; }
+  #peg-watch-root .pgsize:hover { border-color: var(--accent); }
+  #peg-watch-root .pgsize-lbl { font-size: 11px; color: var(--muted); }
+  #peg-watch-root .btn:disabled { opacity: .4; cursor: default; border-color: var(--line); }
+
+  /* StableFX tape table */
+  #peg-watch-root .fx-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+  #peg-watch-root table.fx { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 680px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #peg-watch-root table.fx th { text-align: left; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; font-size: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+  #peg-watch-root table.fx td { padding: 10px 12px; border-bottom: 1px solid var(--panel-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #peg-watch-root table.fx tr:last-child td { border-bottom: none; }
+  #peg-watch-root table.fx tbody tr:hover td { background: var(--panel-2); }
+  #peg-watch-root table.fx .idlink { color: var(--accent); }
+  #peg-watch-root table.fx .pair { font-weight: 700; }
+  #peg-watch-root table.fx .side { color: var(--muted); }
+  #peg-watch-root .bps { font-weight: 700; }
+  #peg-watch-root .bps.tight { color: var(--green); }
+  #peg-watch-root .bps.mid { color: var(--amber); }
+  #peg-watch-root .bps.wide { color: var(--red); }
+  #peg-watch-root .bps.noref { color: var(--muted); font-weight: 400; }
+  #peg-watch-root .stbadge { font-size: 10px; padding: 2px 7px; border-radius: 5px; font-weight: 700; }
+  #peg-watch-root .stbadge.ok { background: rgba(52,211,153,.15); color: var(--green); }
+  #peg-watch-root .stbadge.pend { background: rgba(251,191,36,.15); color: var(--amber); }
+
+  #peg-watch-root .foot { margin-top: 26px; font-size: 11px; color: var(--muted); line-height: 1.6; border-top: 1px solid var(--line); padding-top: 14px; }
+  #peg-watch-root a { color: var(--accent); text-decoration: none; }
+  #peg-watch-root a:hover { text-decoration: underline; }
+  #peg-watch-root .spark { display: flex; align-items: flex-end; gap: 3px; height: 60px; margin-top: 10px; }
+  #peg-watch-root .spark .b { flex: 1; background: linear-gradient(180deg, var(--accent), #2a3f6b); border-radius: 3px 3px 0 0; min-height: 3px; position: relative; transition: filter .15s; }
+  #peg-watch-root .spark .b:hover { filter: brightness(1.4); }
+  #peg-watch-root .spark .b:hover::after { content: attr(data-label); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #000; color: #fff; font-size: 10px; padding: 3px 6px; border-radius: 4px; white-space: nowrap; z-index: 3; }
+
+  /* toast */
+  #peg-watch-root .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 10px 18px; border-radius: 10px; font-size: 13px; box-shadow: 0 10px 40px rgba(0,0,0,.5); transition: transform .3s cubic-bezier(.22,1,.36,1); z-index: 100; }
+  #peg-watch-root .toast.show { transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 600px) {
+    #peg-watch-root .bubble-canvas { height: 360px; }
+    #peg-watch-root .controls { margin-left: 0; width: 100%; }
+    #peg-watch-root .gas-hero .big { font-size: 42px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #peg-watch-root *, #peg-watch-root *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="peg-watch-root">
+  <div class="wrap">
+    <header class="app-head">
+      <h1>ArcPulse</h1>
+      <span class="arc-badge">Arc Testnet · USDC-native</span>
+    </header>
+    <div class="sub">Live stablecoin peg, on-chain holder concentration, and real-dollar gas. The last two read straight from Arc's own chain.</div>
+
+    <div class="tabs" role="tablist" aria-label="Dashboard views">
+      <button class="tab" role="tab" id="tab-peg" aria-controls="view-peg" aria-selected="true" data-mode="peg"><span class="tab-ico">🫧</span>Peg Watch</button>
+      <button class="tab" role="tab" id="tab-whale" aria-controls="view-whale" aria-selected="false" tabindex="-1" data-mode="whale"><span class="tab-ico">🐋</span>Arc Whale Map</button>
+      <button class="tab" role="tab" id="tab-gas" aria-controls="view-gas" aria-selected="false" tabindex="-1" data-mode="gas"><span class="tab-ico">⛽</span>Gas $ (Arc)</button>
+      <button class="tab" role="tab" id="tab-fx" aria-controls="view-fx" aria-selected="false" tabindex="-1" data-mode="fx"><span class="tab-ico">💱</span>StableFX Tape</button>
+    </div>
+
+    <!-- PEG WATCH -->
+    <section class="view active" role="tabpanel" id="view-peg" aria-labelledby="tab-peg" data-view="peg">
+      <div class="statusbar">
+        <span class="status"><span class="dot load" id="peg-dot"></span><span class="txt" id="peg-status" aria-live="polite">Loading…</span></span>
+        <span class="controls">
+          <span class="updated" id="peg-updated"></span>
+          <button class="btn" data-refresh="peg" aria-label="Refresh Peg Watch"><span class="ico">↻</span>Refresh</button>
+          <label class="auto-lbl"><input type="checkbox" data-auto="peg"> Auto (60s)</label>
+        </span>
+      </div>
+      <div class="bubble-canvas" id="peg-canvas">
+        <div class="peg-line"></div><div class="peg-label">$1.00 PEG</div>
+        <div class="peg-note up">above peg</div><div class="peg-note down">below peg</div>
+        <div class="tip" id="peg-tip"></div>
+      </div>
+    </section>
+
+    <!-- WHALE MAP -->
+    <section class="view" role="tabpanel" id="view-whale" aria-labelledby="tab-whale" data-view="whale" hidden>
+      <div class="statusbar">
+        <span class="status"><span class="dot load" id="whale-dot"></span><span class="txt" id="whale-status" aria-live="polite">Loading…</span></span>
+        <span class="controls">
+          <span class="updated" id="whale-updated"></span>
+          <button class="btn" data-refresh="whale" aria-label="Refresh Whale Map"><span class="ico">↻</span>Refresh</button>
+          <label class="auto-lbl"><input type="checkbox" data-auto="whale"> Auto (60s)</label>
+        </span>
+      </div>
+      <div class="toggle-row" role="group" aria-label="Choose token">
+        <button class="toggle" data-token="usdc" aria-pressed="true"><span class="swatch" style="background:var(--accent)"></span>USDC</button>
+        <button class="toggle" data-token="eurc" aria-pressed="false"><span class="swatch" style="background:var(--euro)"></span>EURC</button>
+      </div>
+      <div class="grid" id="whale-stats"></div>
+      <div id="whale-bars"></div>
+      <div class="pager" id="whale-pager"></div>
+    </section>
+
+    <!-- GAS -->
+    <section class="view" role="tabpanel" id="view-gas" aria-labelledby="tab-gas" data-view="gas" hidden>
+      <div class="statusbar">
+        <span class="status"><span class="dot load" id="gas-dot"></span><span class="txt" id="gas-status" aria-live="polite">Loading…</span></span>
+        <span class="controls">
+          <span class="updated" id="gas-updated"></span>
+          <button class="btn" data-refresh="gas" aria-label="Refresh Gas tracker"><span class="ico">↻</span>Refresh</button>
+          <label class="auto-lbl"><input type="checkbox" data-auto="gas" checked> Auto (15s)</label>
+        </span>
+      </div>
+      <div class="gas-hero">
+        <div class="k">Gas spent on Arc (last 24h)</div>
+        <div class="big" id="gas-big">...</div>
+        <div class="note">Arc pays gas in USDC, so this is an actual dollar figure, with no price feed and no ETH conversion. <b>Testnet</b> activity (faucet/dev traffic), so it's real <i>data</i>, not yet real <i>economics</i>.</div>
+      </div>
+      <div class="grid" id="gas-stats"></div>
+      <div class="card" style="margin-bottom:18px">
+        <div class="k">Daily transactions (last 14 days)</div>
+        <div class="spark" id="gas-spark"></div>
+      </div>
+      <div class="feed"><h3>Live transactions (fee in real $)</h3><div id="gas-feed"></div></div>
+      <div class="feed" style="margin-top:18px"><h3>Browse all transactions</h3><div id="tx-list"></div></div>
+      <div class="pager" id="tx-pager"></div>
+    </section>
+
+    <!-- STABLEFX TAPE -->
+    <section class="view" role="tabpanel" id="view-fx" aria-labelledby="tab-fx" data-view="fx" hidden>
+      <div class="statusbar">
+        <span class="status"><span class="dot load" id="fx-dot"></span><span class="txt" id="fx-status" aria-live="polite">Loading…</span></span>
+        <span class="controls">
+          <span class="updated" id="fx-updated"></span>
+          <button class="btn" data-refresh="fx" aria-label="Refresh StableFX tape"><span class="ico">↻</span>Refresh</button>
+          <label class="auto-lbl"><input type="checkbox" data-auto="fx"> Auto (30s)</label>
+        </span>
+      </div>
+      <div class="sub" style="margin-bottom:14px">Every USDC to local-stablecoin FX trade settles atomically on-chain in Arc's StableFX escrow, so the executed rate is public. This tape reconstructs each rate and benchmarks it against the interbank mid (ECB, via Frankfurter) to show the real spread paid. No other chain has native on-chain FX to measure.</div>
+      <div class="grid" id="fx-stats"></div>
+      <div class="fx-wrap"><table class="fx"><thead><tr>
+        <th>Trade</th><th>Pair</th><th>Direction</th><th>Size</th><th>Exec rate</th><th>Mid (ECB)</th><th>Spread</th><th>Fees</th><th>Status</th>
+      </tr></thead><tbody id="fx-rows"></tbody></table></div>
+      <div class="pager" id="fx-pager"></div>
+    </section>
+
+    <div class="foot" id="foot"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- config (verified against testnet.arcscan.app on 2026-07-19) ----------
+  var ARC_API = "https://testnet.arcscan.app/api/v2";
+  var ARC_WEB = "https://testnet.arcscan.app";
+  var CG_API  = "https://api.coingecko.com/api/v3";
+  var ARC_NATIVE_DECIMALS = 18;              // gas fee.value is 18-dec wei. CONFIRMED: gas_price * gas_used === fee.value
+  var TOKENS = {
+    usdc: { addr: "0x3600000000000000000000000000000000000000", sym: "USDC", color: "var(--accent)", grad: "linear-gradient(90deg,#4f9cff,#3a6fd8)" },
+    eurc: { addr: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a", sym: "EURC", color: "var(--euro)", grad: "linear-gradient(90deg,#7c6cff,#5a4fd8)" }
+  };
+  var $ = function (id) { return document.getElementById(id); };
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---------- formatting ----------
+  var fmtUSD = function (n) { return "$" + n.toLocaleString(undefined, { maximumFractionDigits: n < 1 ? 4 : 2, minimumFractionDigits: n < 1 ? 4 : 2 }); };
+  function fmtCompact(n) {
+    n = Number(n);
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+    return n.toLocaleString();
+  }
+  var trunc = function (a) { return a ? a.slice(0, 6) + "…" + a.slice(-4) : "n/a"; };
+
+  // ---------- status / freshness ----------
+  var lastTs = {};   // mode -> Date.now() of last successful load
+  function setStatus(mode, kind, text) {
+    var d = $(mode + "-dot"); d.className = "dot " + kind;
+    $(mode + "-status").innerHTML = (kind === "demo" ? '<span class="demo-tag">demo data</span> ' : "") + text +
+      (kind === "err" ? ' <button class="btn retry" data-refresh="' + mode + '">Retry</button>' : "");
+  }
+  function markFresh(mode) { lastTs[mode] = Date.now(); tickFreshness(); }
+  function tickFreshness() {
+    ["peg", "whale", "gas", "fx"].forEach(function (m) {
+      var el = $(m + "-updated"); if (!el) return;
+      if (!lastTs[m]) { el.textContent = ""; return; }
+      var s = Math.round((Date.now() - lastTs[m]) / 1000);
+      el.textContent = "updated " + (s < 2 ? "just now" : s < 60 ? s + "s ago" : Math.round(s / 60) + "m ago");
+    });
+  }
+  setInterval(tickFreshness, 1000);
+
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2600);
+  }
+  function spin(mode, on) {
+    var btn = document.querySelector('[data-refresh="' + mode + '"]');
+    if (btn) btn.classList.toggle("spin", on);
+  }
+
+  // ---------- auto-refresh manager ----------
+  var timers = {};
+  var AUTO_MS = { peg: 60000, whale: 60000, gas: 15000, fx: 30000 };  // peg 60s to respect CoinGecko free-tier limits
+  function setAuto(mode, on) {
+    clearInterval(timers[mode]);
+    if (on) timers[mode] = setInterval(function () { reload(mode, true); }, AUTO_MS[mode]);
+  }
+  function reload(mode, quiet) {
+    if (mode === "peg") loadPeg(quiet);
+    else if (mode === "whale") loadWhale(null, quiet);   // null = reload current token/page
+    else if (mode === "gas") loadGas(quiet);
+    else if (mode === "fx") loadFx(quiet);
+  }
+  // whale pagination state (cursor-based: Blockscout returns next_page_params)
+  // ---------- shared pagination (configurable rows-per-page) ----------
+  var PAGE_SIZES = [10, 20, 30, 40, 50];
+  // Blockscout cursor endpoints return a fixed ~50/API-page, so we buffer forward
+  // and slice to the chosen display size. Paging back is free (already buffered).
+  function CursorList(cfg) {
+    return {
+      size: cfg.size || 10, page: 0, buffer: [], cursor: null, done: false,
+      reset: function () { this.page = 0; this.buffer = []; this.cursor = null; this.done = false; },
+      ensure: function (need) {
+        var self = this;
+        if (self.buffer.length >= need || self.done) return Promise.resolve();
+        return fetch(cfg.url(self.cursor)).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+          .then(function (resp) {
+            self.buffer = self.buffer.concat(resp.items || resp || []);
+            self.cursor = resp.next_page_params || null;
+            if (!self.cursor) self.done = true;
+            return self.ensure(need);
+          });
+      },
+      items: function () { return this.buffer.slice(this.page * this.size, (this.page + 1) * this.size); },
+      hasNext: function () { return this.buffer.length > (this.page + 1) * this.size || !this.done; },
+      hasPrev: function () { return this.page > 0; }
+    };
+  }
+  function pagerHTML(pfx, midLabel, hasPrev, hasNext, size) {
+    var opts = PAGE_SIZES.map(function (n) { return "<option value='" + n + "'" + (n == size ? " selected" : "") + ">" + n + "</option>"; }).join("");
+    return "<button class='btn' id='" + pfx + "-prev'" + (hasPrev ? "" : " disabled") + ">‹ Prev</button>" +
+      "<span class='pageno'>" + midLabel + "</span>" +
+      "<button class='btn' id='" + pfx + "-next'" + (hasNext ? "" : " disabled") + ">Next ›</button>" +
+      "<span class='pgsize-wrap'><select class='pgsize' id='" + pfx + "-size' aria-label='Rows per page'>" + opts + "</select><span class='pgsize-lbl'>/ page</span></span>";
+  }
+  function wirePager(pfx, onPrev, onNext, onSize) {
+    var p = $(pfx + "-prev"), n = $(pfx + "-next"), s = $(pfx + "-size");
+    if (p) p.onclick = onPrev; if (n) n.onclick = onNext;
+    if (s) s.onchange = function () { onSize(parseInt(s.value, 10)); };
+  }
+  // whale-map + gas-history buffered lists (holdersURL / txURL are hoisted below)
+  var whaleTokenKey = "usdc", whaleMeta = null, whaleStatsHTML = "";
+  var whaleList = CursorList({ size: 10, url: function (c) { return holdersURL(TOKENS[whaleTokenKey], c); } });
+  var txList = CursorList({ size: 10, url: function (c) { return txURL(c); } });
+
+  // ================= TABS (accessible, keyboard-navigable) =================
+  var loaded = {};
+  var tabEls = Array.prototype.slice.call(document.querySelectorAll("#peg-watch-root .tab"));
+  function switchMode(mode, focus) {
+    tabEls.forEach(function (t) {
+      var sel = t.dataset.mode === mode;
+      t.setAttribute("aria-selected", sel); t.tabIndex = sel ? 0 : -1;
+      if (sel && focus) t.focus();
+    });
+    document.querySelectorAll("#peg-watch-root .view").forEach(function (v) {
+      var on = v.dataset.view === mode; v.classList.toggle("active", on); v.hidden = !on;
+    });
+    if (!loaded[mode]) { loaded[mode] = true; reload(mode); }
+  }
+  tabEls.forEach(function (t, i) {
+    t.addEventListener("click", function () { switchMode(t.dataset.mode); });
+    t.addEventListener("keydown", function (e) {
+      var d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : e.key === "Home" ? "h" : e.key === "End" ? "e" : 0;
+      if (!d) return; e.preventDefault();
+      var n = d === "h" ? 0 : d === "e" ? tabEls.length - 1 : (i + d + tabEls.length) % tabEls.length;
+      switchMode(tabEls[n].dataset.mode, true);
+    });
+  });
+  // wire refresh buttons + auto toggles (delegated so retry buttons work too)
+  document.querySelector("#peg-watch-root").addEventListener("click", function (e) {
+    var r = e.target.closest("[data-refresh]"); if (r) { reload(r.dataset.refresh); }
+  });
+  document.querySelectorAll("[data-auto]").forEach(function (cb) {
+    cb.addEventListener("change", function () { setAuto(cb.dataset.auto, cb.checked); if (cb.checked) toast("Auto-refresh on"); });
+  });
+
+  // ================= 1. PEG WATCH (CoinGecko, real mainnet) =================
+  var pegCoins = null;
+  function skeletonPeg() {
+    var c = $("peg-canvas");
+    c.querySelectorAll(".bubble,.sk").forEach(function (b) { b.remove(); });
+    var W = c.clientWidth, H = c.clientHeight;
+    for (var i = 0; i < 6; i++) {
+      var r = 30 + (i % 3) * 12, s = document.createElement("div");
+      s.className = "sk"; s.style.cssText = "position:absolute;border-radius:50%;width:" + (r * 2) + "px;height:" + (r * 2) + "px;left:" + ((W / 7) * (i + 1) - r) + "px;top:" + (H / 2 - r) + "px;";
+      c.appendChild(s);
+    }
+  }
+  function loadPeg(quiet) {
+    if (!quiet) skeletonPeg();
+    setStatus("peg", "load", "Fetching top stablecoins from CoinGecko…"); spin("peg", true);
+    fetch(CG_API + "/coins/markets?vs_currency=usd&category=stablecoins&order=market_cap_desc&per_page=10&page=1&sparkline=false")
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (coins) {
+        pegCoins = coins.filter(function (c) { return c.current_price; });
+        renderPeg(pegCoins);
+        setStatus("peg", "live", "Live · CoinGecko · " + pegCoins.length + " coins"); markFresh("peg");
+      })
+      .catch(function (e) {
+        pegCoins = DEMO_PEG; renderPeg(DEMO_PEG);
+        setStatus("peg", "demo", "CoinGecko unreachable (" + e.message + "). Showing sample coins.");
+      })
+      .finally(function () { spin("peg", false); });
+  }
+  function renderPeg(coins) {
+    var canvas = $("peg-canvas"), W = canvas.clientWidth, H = canvas.clientHeight;
+    canvas.querySelectorAll(".bubble,.sk").forEach(function (b) { b.remove(); });
+    var maxCap = Math.max.apply(null, coins.map(function (c) { return c.market_cap || 1; }));
+    var maxDrift = Math.max(0.001, Math.max.apply(null, coins.map(function (c) { return Math.abs(c.current_price - 1); })));
+    var nodes = coins.map(function (c, i) {
+      var drift = c.current_price - 1;
+      var r = 22 + 48 * Math.sqrt((c.market_cap || 1) / maxCap);
+      return { c: c, r: r, x: (W / (coins.length + 1)) * (i + 1), y: H / 2 - (drift / maxDrift) * (H / 2 - 60), drift: drift };
+    });
+    for (var it = 0; it < 250; it++) {
+      for (var a = 0; a < nodes.length; a++) for (var b = a + 1; b < nodes.length; b++) {
+        var n1 = nodes[a], n2 = nodes[b], dx = n2.x - n1.x, dy = n2.y - n1.y;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 0.01, min = n1.r + n2.r + 6;
+        if (dist < min) { var push = (min - dist) / 2, ux = dx / dist, uy = dy / dist; n1.x -= ux * push; n2.x += ux * push; n1.y -= uy * push * 0.3; n2.y += uy * push * 0.3; }
+      }
+      nodes.forEach(function (n) { n.x = Math.max(n.r + 4, Math.min(W - n.r - 4, n.x)); n.y = Math.max(n.r + 4, Math.min(H - n.r - 4, n.y)); });
+    }
+    nodes.forEach(function (n) {
+      var absD = Math.abs(n.drift), col = absD < 0.001 ? "var(--green)" : absD < 0.005 ? "var(--amber)" : "var(--red)";
+      var el = document.createElement("div");
+      el.className = "bubble" + (reduceMotion ? "" : " anim");
+      el.tabIndex = 0; el.setAttribute("role", "button");
+      el.setAttribute("aria-label", n.c.name + ", " + fmtUSD(n.c.current_price) + ", " + (n.drift * 100).toFixed(3) + "% from peg");
+      el.style.cssText += "width:" + (n.r * 2) + "px;height:" + (n.r * 2) + "px;left:" + (n.x - n.r) + "px;top:" + (n.y - n.r) + "px;background:radial-gradient(circle at 35% 30%," + col + "44," + col + "22);border-color:" + col + ";";
+      el.style.animationDelay = (Math.random() * 4).toFixed(2) + "s";
+      el.innerHTML = '<div class="sym">' + n.c.symbol.toUpperCase() + '</div><div class="px">' + fmtUSD(n.c.current_price) + '</div>';
+      var showTip = function () { pegTip(n, col); };
+      el.addEventListener("mouseenter", showTip); el.addEventListener("focus", showTip);
+      el.addEventListener("mouseleave", hidePegTip); el.addEventListener("blur", hidePegTip);
+      if (n.c.id) { el.style.cursor = "pointer"; el.addEventListener("click", function () { window.open("https://www.coingecko.com/en/coins/" + n.c.id, "_blank", "noopener"); }); }
+      canvas.appendChild(el);
+    });
+  }
+  function pegTip(n, col) {
+    var tip = $("peg-tip"), c = n.c;
+    var sign = n.drift >= 0 ? "+" : "";
+    tip.innerHTML = '<div class="t-name">' + c.name + ' (' + c.symbol.toUpperCase() + ')</div>' +
+      '<div class="t-row"><span>Price</span><b>' + fmtUSD(c.current_price) + '</b></div>' +
+      '<div class="t-row"><span>Drift from $1</span><b style="color:' + col + '">' + sign + (n.drift * 100).toFixed(3) + '%</b></div>' +
+      '<div class="t-row"><span>Market cap</span><b>$' + fmtCompact(c.market_cap || 0) + '</b></div>' +
+      (c.id ? '<div class="t-row" style="margin-top:4px"><span>Click to open ↗</span></div>' : "");
+    var cw = $("peg-canvas").clientWidth;
+    var left = Math.max(6, Math.min(cw - 232, n.x - 110));
+    tip.style.left = left + "px"; tip.style.top = Math.max(6, n.y - n.r - 96) + "px";
+    tip.classList.add("show");
+  }
+  function hidePegTip() { $("peg-tip").classList.remove("show"); }
+
+  // re-layout bubbles on resize (debounced)
+  var rz;
+  window.addEventListener("resize", function () {
+    clearTimeout(rz); rz = setTimeout(function () {
+      if (pegCoins && document.querySelector('[data-view="peg"]').classList.contains("active")) renderPeg(pegCoins);
+    }, 200);
+  });
+
+  // ================= 2. ARC WHALE MAP (Arc's own holders, REAL, no key) =================
+  document.querySelectorAll("#peg-watch-root .toggle").forEach(function (t) {
+    t.addEventListener("click", function () {
+      document.querySelectorAll("#peg-watch-root .toggle").forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+      t.setAttribute("aria-pressed", "true");
+      whaleTokenKey = t.dataset.token; whaleMeta = null; whaleStatsHTML = ""; whaleList.reset();
+      showWhale(true);
+    });
+  });
+  function skeletonWhale() {
+    $("whale-stats").innerHTML = "<div class='card sk sk-card'></div>".repeat(4);
+    $("whale-bars").innerHTML = Array.from({ length: 8 }).map(function (_, i) {
+      return "<div class='whale-bar'><div class='track sk' style='width:" + (90 - i * 9) + "%'></div></div>";
+    }).join("");
+  }
+  function holdersURL(tk, cursor) {
+    var u = ARC_API + "/tokens/" + tk.addr + "/holders";
+    if (cursor) u += "?" + new URLSearchParams(cursor).toString();
+    return u;
+  }
+  function loadWhale(key, quiet) {   // entry from tabs/refresh; token is driven by the toggle
+    if (!quiet) { whaleList.reset(); whaleMeta = null; whaleStatsHTML = ""; }  // fresh data
+    showWhale(!quiet);
+  }
+  function showWhale(skeleton) {
+    var tk = TOKENS[whaleTokenKey];
+    if (skeleton) skeletonWhale();
+    setStatus("whale", "load", "Loading " + tk.sym + " holders…"); spin("whale", true);
+    var jobs = [whaleList.ensure((whaleList.page + 1) * whaleList.size)];
+    if (!whaleMeta) jobs.push(fetch(ARC_API + "/tokens/" + tk.addr).then(function (r) { return r.json(); }).then(function (m) { whaleMeta = m; }));
+    Promise.all(jobs).then(function () {
+      renderWhale(tk);
+      setStatus("whale", "live", "Live · Arc Blockscout · " + fmtCompact(whaleMeta.holders_count) + " total " + tk.sym + " holders");
+      markFresh("whale");
+    }).catch(function (e) {
+      whaleMeta = whaleMeta || DEMO_TOKEN[whaleTokenKey];
+      if (!whaleList.buffer.length) { whaleList.buffer = DEMO_HOLDERS; whaleList.done = true; }
+      renderWhale(tk);
+      setStatus("whale", "demo", "Arc explorer unreachable (" + e.message + "). Showing sample holders.");
+    }).finally(function () { spin("whale", false); });
+  }
+  function renderWhale(tk) {
+    var meta = whaleMeta, holders = whaleList.items(), page = whaleList.page, size = whaleList.size;
+    var total = BigInt(meta.total_supply || "0");            // BigInt: balances exceed JS safe-int range
+    var pct = function (v) { if (total === 0n) return 0; return Number(BigInt(v) * 1000000n / total) / 10000; };
+    if (page === 0 && whaleList.buffer.length) {             // "top" stats from the ranked head, kept across pages
+      var b = whaleList.buffer, top10 = b.slice(0, 10).reduce(function (s, h) { return s + pct(h.value); }, 0);
+      whaleStatsHTML =
+        card("Total holders", fmtCompact(meta.holders_count), tk.sym + " on Arc") +
+        card("Top holder", pct(b[0].value).toFixed(2) + "%", trunc((b[0].address || {}).hash)) +
+        card("Top 10 concentration", top10.toFixed(1) + "%", "of total supply") +
+        card("Total supply", fmtCompact(Number(total) / 1e6), tk.sym + " (6-dec)");
+    }
+    $("whale-stats").innerHTML = whaleStatsHTML;
+    $("whale-bars").innerHTML = holders.map(function (h, i) {
+      var p = pct(h.value), a = (h.address || {}), name = a.name || trunc(a.hash), rank = page * size + i + 1;
+      return '<a class="whale-bar" href="' + ARC_WEB + '/address/' + a.hash + '" target="_blank" rel="noopener" title="Open ' + (a.hash || "") + ' ↗">' +
+        '<div class="lbl"><span class="addr"><span class="rank">#' + rank + '</span>' + name + '</span><span class="pct">' + p.toFixed(2) + '%</span></div>' +
+        '<div class="track"><div class="fill" style="width:' + Math.min(100, p) + '%;background:' + tk.grad + '"></div></div></a>';
+    }).join("");
+    var from = page * size + 1, to = page * size + holders.length;
+    $("whale-pager").innerHTML = pagerHTML("whale", "Page " + (page + 1) + " · holders " + from + " to " + to, whaleList.hasPrev(), whaleList.hasNext(), size);
+    wirePager("whale",
+      function () { if (whaleList.hasPrev()) { whaleList.page--; showWhale(false); } },
+      function () { whaleList.page++; showWhale(true); },
+      function (n) { whaleList.size = n; whaleList.page = 0; showWhale(true); });
+  }
+
+  // ================= 3. GAS $ (Arc, real testnet, 18 decimals confirmed) =================
+  function skeletonGas() {
+    $("gas-big").textContent = "...";
+    $("gas-stats").innerHTML = "<div class='card sk sk-card'></div>".repeat(6);
+    $("gas-feed").innerHTML = "<div style='padding:10px 16px'><div class='sk' style='height:16px'></div></div>".repeat(6);
+  }
+  function loadGas(quiet) {
+    if (!quiet) skeletonGas();
+    // browse-all list is independent of the 15s live refresh: only (re)load it on
+    // first open / manual refresh, so paging deep into history is never yanked back.
+    if (!quiet) { txList.reset(); showTxPage(true); }
+    setStatus("gas", "load", "Loading Arc network stats…"); spin("gas", true);
+    Promise.all([
+      fetch(ARC_API + "/stats").then(function (r) { return r.json(); }),
+      fetch(ARC_API + "/main-page/transactions").then(function (r) { return r.json(); }),
+      fetch(ARC_API + "/stats/charts/transactions").then(function (r) { return r.json(); }).catch(function () { return { chart_data: [] }; })
+    ]).then(function (res) {
+      renderGas(res[0], res[1], res[2], quiet);
+      setStatus("gas", "live", "Live · Arc Blockscout"); markFresh("gas");
+    }).catch(function (e) {
+      renderGas(DEMO_STATS, DEMO_TXS, { chart_data: [] });
+      setStatus("gas", "demo", "Arc explorer unreachable (" + e.message + "). Showing sample data.");
+    }).finally(function () { spin("gas", false); });
+  }
+  var feePrev = {};   // hash -> seen, to animate only genuinely new rows
+  function renderGas(stats, txs, chart, quiet) {
+    var avg = (stats.gas_prices && stats.gas_prices.average) || 23;
+    var gasToday = Number(stats.gas_used_today || 0);
+    var usdToday = gasToday * avg / 1e9;      // = gas_used * avg_gwei * 1e9 / 1e18
+    animateNumber($("gas-big"), usdToday, function (v) { return fmtUSD(v); }, quiet);
+    var perTx = stats.transactions_today ? usdToday / Number(stats.transactions_today) : 0;
+    $("gas-stats").innerHTML =
+      card("Transactions today", fmtCompact(stats.transactions_today), "≈ " + (Number(stats.transactions_today) / 86400).toFixed(1) + " tx/sec") +
+      card("Avg cost / tx", fmtUSD(perTx), "in real USDC") +
+      card("Block time", (Number(stats.average_block_time) / 1000).toFixed(2) + "s", "Malachite · sub-second") +
+      card("Total transactions", fmtCompact(stats.total_transactions), "all-time") +
+      card("Total addresses", fmtCompact(stats.total_addresses), "on Arc") +
+      card("Network load", Number(stats.network_utilization_percentage).toFixed(1) + "%", "utilization");
+    var data = (chart.chart_data || []).slice(0, 14).reverse();
+    if (data.length) {
+      var max = Math.max.apply(null, data.map(function (d) { return d.transactions_count; }));
+      $("gas-spark").innerHTML = data.map(function (d) {
+        return '<div class="b" style="height:' + (d.transactions_count / max * 100) + '%" data-label="' + d.date + ": " + Number(d.transactions_count).toLocaleString() + '"></div>';
+      }).join("");
+    } else { $("gas-spark").innerHTML = '<span style="color:var(--muted);font-size:12px">chart data unavailable</span>'; }
+    renderFeed(txs);
+  }
+  function renderFeed(txs) {
+    $("gas-feed").innerHTML = (txs || []).slice(0, 8).map(function (t) {
+      var fee = t.fee && t.fee.value ? Number(t.fee.value) / Math.pow(10, ARC_NATIVE_DECIMALS) : 0;
+      var isNew = t.hash && !feePrev[t.hash];
+      return '<a class="feed-row ' + (isNew && !reduceMotion ? "new" : "") + '" href="' + ARC_WEB + '/tx/' + t.hash + '" target="_blank" rel="noopener" title="Open transaction ↗">' +
+        '<span class="hash">' + trunc(t.hash) + '</span><span class="method">' +
+        (t.method || (t.transaction_types && t.transaction_types[0]) || "tx") + '</span>' +
+        '<span class="fee">' + fmtUSD(fee) + '</span></a>';
+    }).join("");
+    feePrev = {}; (txs || []).forEach(function (t) { if (t.hash) feePrev[t.hash] = 1; });
+  }
+
+  // ---- browse all transactions (buffered cursor pagination, lazy per page) ----
+  function txURL(cursor) {
+    var u = ARC_API + "/transactions?filter=validated";
+    if (cursor) u += "&" + new URLSearchParams(cursor).toString();
+    return u;
+  }
+  function relTime(iso) {
+    if (!iso) return "";
+    var s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return s + "s ago";
+    if (s < 3600) return Math.round(s / 60) + "m ago";
+    if (s < 86400) return Math.round(s / 3600) + "h ago";
+    return Math.round(s / 86400) + "d ago";
+  }
+  function showTxPage(skeleton) {
+    if (skeleton) $("tx-list").innerHTML = "<div style='padding:10px 16px'><div class='sk' style='height:16px'></div></div>".repeat(6);
+    txList.ensure((txList.page + 1) * txList.size).then(function () { renderTxPage(); })
+      .catch(function (e) {
+        $("tx-list").innerHTML = '<div class="feed-row"><span style="color:var(--muted)">could not load transactions (' + e.message + ')</span></div>';
+        $("tx-pager").innerHTML = "";
+      });
+  }
+  function renderTxPage() {
+    var txs = txList.items(), page = txList.page, size = txList.size;
+    $("tx-list").innerHTML = txs.map(function (t) {
+      var fee = t.fee && t.fee.value ? Number(t.fee.value) / Math.pow(10, ARC_NATIVE_DECIMALS) : 0;
+      var ok = t.status === "ok" || t.result === "success";
+      return '<a class="feed-row' + (ok ? "" : " fail") + '" href="' + ARC_WEB + '/tx/' + t.hash + '" target="_blank" rel="noopener" title="Open transaction ↗">' +
+        '<span class="hash">' + trunc(t.hash) + '</span>' +
+        '<span class="method">' + (t.method || (t.transaction_types && t.transaction_types[0]) || "tx") + '</span>' +
+        '<span class="ts">' + relTime(t.timestamp) + '</span>' +
+        '<span class="fee">' + fmtUSD(fee) + '</span></a>';
+    }).join("");
+    var from = page * size + 1, to = page * size + txs.length;
+    $("tx-pager").innerHTML = pagerHTML("tx", "Page " + (page + 1) + " · txs " + from + " to " + to, txList.hasPrev(), txList.hasNext(), size);
+    wirePager("tx",
+      function () { if (txList.hasPrev()) { txList.page--; showTxPage(false); } },
+      function () { txList.page++; showTxPage(true); },
+      function (n) { txList.size = n; txList.page = 0; showTxPage(true); });
+  }
+  // count-up animation for the hero number
+  function animateNumber(el, to, fmt, quiet) {
+    if (reduceMotion || quiet) { el.textContent = fmt(to); return; }
+    var from = 0, start = null, dur = 900;
+    function step(ts) {
+      if (start === null) start = ts;
+      var p = Math.min(1, (ts - start) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = fmt(from + (to - from) * e);
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function card(k, v, vs) { return '<div class="card"><div class="k">' + k + '</div><div class="v">' + v + '</div><div class="vs">' + (vs || "") + '</div></div>'; }
+
+  // ================= 4. STABLEFX BEST-EXECUTION TAPE (unique to Arc) =================
+  // On-chain FX is Arc-only: USDC<->local-stablecoin trades settle atomically in the
+  // FxEscrow contract, so each executed rate is public and auditable. We read trades
+  // via getTradeDetails() over JSON-RPC (selectors precomputed) and benchmark the
+  // executed rate against the ECB interbank mid to surface the real spread paid.
+  var FX_ADDR = "0x867650F5eAe8df91445971f14d89fd84F0C9a9f8";
+  var RPC_URL = "https://rpc.testnet.arc.network";
+  var SEL_TRADE = "0x695730a5";   // getTradeDetails(uint256)  -- keccak-derived, verified
+  var SEL_LASTID = "0x52bcfd5b";  // lastTradeId()
+  var FOREX_API = "https://api.frankfurter.dev/v1/latest?base=USD";
+  var CCY = { USDC: "USD", USDT: "USD", PYUSD: "USD", EURC: "EUR", QCAD: "CAD", GBPX: "GBP", GBPT: "GBP", XSGD: "SGD" };
+  var tokCache = {}, forex = null;
+  var fxState = { page: 0, size: 10, lastId: null };
+  function fmtNum(n) { return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+  function hex64(n) { var s = n.toString(16); return "0".repeat(64 - s.length) + s; }
+  function decodeTrade(hex) {
+    if (!hex || hex === "0x" || hex.length < 2 + 64 * 13) return null;   // need >=13 static words
+    var h = hex.slice(2), w = function (i) { return h.slice(i * 64, (i + 1) * 64); };
+    var A = function (i) { return "0x" + w(i).slice(24); }, N = function (i) { return BigInt("0x" + w(i)); };
+    return { base: A(0), quote: A(1), baseAmount: N(5), quoteAmount: N(6),
+      takerFee: N(7), makerFee: N(8), maturity: Number(N(11)), status: Number(N(12)) };
+  }
+  function rpc(payload) {
+    return fetch(RPC_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
+      .then(function (r) { if (!r.ok) throw new Error("RPC " + r.status); return r.json(); });
+  }
+  function ensureLastId() {
+    return rpc({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: FX_ADDR, data: SEL_LASTID }, "latest"] })
+      .then(function (d) { if (!d.result || d.result === "0x") throw new Error("no lastId"); fxState.lastId = Number(BigInt(d.result)); return fxState.lastId; });
+  }
+  // Multicall3 (canonical address, verified deployed on Arc) lets us fetch a whole
+  // page of trades in ONE eth_call -> no per-request rate-limit risk at any page size.
+  var MC_ADDR = "0xcA11bde05977b3631167028862bE2a173976CA11";
+  var SEL_AGG3 = "82ad56cb";   // aggregate3((address,bool,bytes)[]) -- verified live
+  function pad64(h) { return h.length >= 64 ? h.slice(-64) : "0".repeat(64 - h.length) + h; }
+  function encodeAggregate3(ids) {
+    var N = ids.length, head = "", tail = "";
+    for (var i = 0; i < N; i++) head += pad64((32 * N + 192 * i).toString(16));   // offset to each element
+    ids.forEach(function (id) {
+      var cd = SEL_TRADE.slice(2) + hex64(id);       // 36-byte getTradeDetails(id) calldata
+      while (cd.length < 128) cd += "0";             // pad bytes to a 64-byte boundary
+      tail += pad64(FX_ADDR.slice(2).toLowerCase()) + pad64("1") + pad64("60") + pad64("24") + cd;  // target, allowFailure, bytesOffset, len
+    });
+    return "0x" + SEL_AGG3 + pad64("20") + pad64(N.toString(16)) + head + tail;
+  }
+  function decodeAggregate3(hex) {
+    var h = hex.slice(2), w = function (i) { return h.slice(i * 64, (i + 1) * 64); };
+    var N = parseInt(w(1), 16), out = [];
+    for (var i = 0; i < N; i++) {
+      var E = 2 + parseInt(w(2 + i), 16) / 32;                    // word index where result tuple i starts
+      var success = parseInt(w(E), 16), len = parseInt(w(E + 2), 16);
+      out.push(success ? "0x" + h.slice((E + 3) * 64, (E + 3) * 64 + len * 2) : null);
+    }
+    return out;
+  }
+  function batchTrades(ids) {   // one eth_call for the entire page
+    return rpc({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: MC_ADDR, data: encodeAggregate3(ids) }, "latest"] })
+      .then(function (d) {
+        if (d.error || !d.result) throw new Error(d.error ? d.error.message : "empty multicall");
+        var results = decodeAggregate3(d.result);
+        return ids.map(function (id, i) { var t = results[i] ? decodeTrade(results[i]) : null; if (t) t.id = id; return t; }).filter(Boolean);
+      });
+  }
+  function hydrateTokens(trades) {   // resolve token symbol + decimals, cached
+    var need = {}; trades.forEach(function (t) { if (!tokCache[t.base]) need[t.base] = 1; if (!tokCache[t.quote]) need[t.quote] = 1; });
+    return Promise.all(Object.keys(need).map(function (a) {
+      return fetch(ARC_API + "/tokens/" + a).then(function (r) { return r.json(); })
+        .then(function (d) { tokCache[a] = { symbol: d.symbol || trunc(a), decimals: +d.decimals || 6 }; })
+        .catch(function () { tokCache[a] = { symbol: trunc(a), decimals: 6 }; });
+    }));
+  }
+  function ensureForex() {
+    if (forex) return Promise.resolve(forex);
+    return fetch(FOREX_API).then(function (r) { return r.json(); })
+      .then(function (d) { forex = Object.assign({ USD: 1 }, d.rates || {}); return forex; })
+      .catch(function () { forex = { USD: 1, CAD: 1.40, EUR: 0.87, GBP: 0.74 }; return forex; });
+  }
+  function tradeView(t) {
+    var b = tokCache[t.base] || { symbol: trunc(t.base), decimals: 6 };
+    var q = tokCache[t.quote] || { symbol: trunc(t.quote), decimals: 6 };
+    var baseF = Number(t.baseAmount) / Math.pow(10, b.decimals);
+    var quoteF = Number(t.quoteAmount) / Math.pow(10, q.decimals);
+    var feeF = Number(t.takerFee + t.makerFee) / Math.pow(10, q.decimals);
+    var execRate = baseF ? quoteF / baseF : 0;
+    var cB = CCY[b.symbol], cQ = CCY[q.symbol], mid = null, bps = null;
+    if (cB && cQ && forex && forex[cB] && forex[cQ]) { mid = forex[cQ] / forex[cB]; bps = mid ? (execRate / mid - 1) * 10000 : null; }
+    var notionalUSD = cB && forex && forex[cB] ? baseF / forex[cB] : baseF;
+    return { id: t.id, bSym: b.symbol, qSym: q.symbol, baseF: baseF, feeF: feeF, execRate: execRate, mid: mid, bps: bps, notionalUSD: notionalUSD, status: t.status };
+  }
+  function skeletonFx() {
+    $("fx-stats").innerHTML = "<div class='card sk sk-card'></div>".repeat(4);
+    $("fx-rows").innerHTML = Array.from({ length: 8 }).map(function () { return "<tr><td colspan='9'><div class='sk' style='height:16px'></div></td></tr>"; }).join("");
+  }
+  function loadFx(quiet) {
+    if (!quiet) skeletonFx();
+    setStatus("fx", "load", "Reading StableFX trades from Arc…"); spin("fx", true);
+    ensureLastId().then(function (last) {
+      var start = last - fxState.page * fxState.size;   // highest trade id on this page
+      if (start < 1) { $("fx-rows").innerHTML = "<tr><td colspan='9' style='color:var(--muted);padding:16px'>no more trades</td></tr>"; renderFxPager(0); return; }
+      var ids = []; for (var id = start; id > Math.max(0, start - fxState.size); id--) ids.push(id);
+      return Promise.all([batchTrades(ids), ensureForex()]).then(function (r) {
+        return hydrateTokens(r[0]).then(function () { renderFx(r[0].map(tradeView), start); });
+      });
+    }).then(function () { setStatus("fx", "live", "Live · Arc RPC + StableFX escrow · last trade #" + fxState.lastId); markFresh("fx"); })
+      .catch(function (e) { renderFx(DEMO_FX, 476); setStatus("fx", "demo", "StableFX/RPC unreachable (" + e.message + "). Showing sample tape."); })
+      .finally(function () { spin("fx", false); });
+  }
+  function bpsClass(b) { if (b == null) return "noref"; var a = Math.abs(b); return a < 20 ? "tight" : a < 75 ? "mid" : "wide"; }
+  function sBps(b) { return b == null ? "n/a" : (b >= 0 ? "+" : "") + b.toFixed(0) + " bps"; }
+  function renderFx(rows, start) {
+    var ref = rows.filter(function (r) { return r.bps != null; });
+    var avg = ref.length ? ref.reduce(function (s, r) { return s + r.bps; }, 0) / ref.length : null;
+    var tight = ref.length ? Math.min.apply(null, ref.map(function (r) { return Math.abs(r.bps); })) : null;
+    var vol = rows.reduce(function (s, r) { return s + (r.notionalUSD || 0); }, 0);
+    var settled = rows.filter(function (r) { return r.status === 2; }).length;
+    $("fx-stats").innerHTML =
+      card("Trades (page)", rows.length + "", settled + " settled") +
+      card("Avg spread", avg == null ? "n/a" : sBps(avg), "executed vs ECB mid") +
+      card("Tightest spread", tight == null ? "n/a" : tight.toFixed(0) + " bps", "best execution") +
+      card("Volume (page)", "$" + fmtCompact(vol), "notional in USD");
+    $("fx-rows").innerHTML = rows.map(function (r) {
+      var st = r.status === 2 ? ["settled", "ok"] : ["pending", "pend"];
+      return "<tr>" +
+        "<td><a class='idlink' href='" + ARC_WEB + "/address/" + FX_ADDR + "' target='_blank' rel='noopener' title='Open FxEscrow ↗'>#" + r.id + "</a></td>" +
+        "<td class='pair'>" + r.bSym + "/" + r.qSym + "</td>" +
+        "<td class='side'>" + r.bSym + " &rarr; " + r.qSym + "</td>" +
+        "<td>" + fmtNum(r.baseF) + " " + r.bSym + "</td>" +
+        "<td>" + r.execRate.toFixed(4) + "</td>" +
+        "<td>" + (r.mid == null ? "<span class='bps noref'>no ref</span>" : r.mid.toFixed(4)) + "</td>" +
+        "<td><span class='bps " + bpsClass(r.bps) + "'>" + (r.bps == null ? "no ref" : sBps(r.bps)) + "</span></td>" +
+        "<td>" + r.feeF.toFixed(2) + " " + r.qSym + "</td>" +
+        "<td><span class='stbadge " + st[1] + "'>" + st[0] + "</span></td>" +
+        "</tr>";
+    }).join("");
+    renderFxPager(start);
+  }
+  function renderFxPager(start) {
+    var hasNext = start - fxState.size >= 1;
+    var mid = "Page " + (fxState.page + 1) + " · trades #" + start + " to #" + Math.max(1, start - fxState.size + 1);
+    $("fx-pager").innerHTML = pagerHTML("fx", mid, fxState.page > 0, hasNext, fxState.size);
+    wirePager("fx",
+      function () { if (fxState.page > 0) { fxState.page--; loadFx(); } },
+      function () { if (start - fxState.size >= 1) { fxState.page++; loadFx(); } },
+      function (n) { fxState.size = n; fxState.page = 0; loadFx(); });
+  }
+
+  // ---------- demo fallbacks (labeled, never passed off as real) ----------
+  var DEMO_PEG = [
+    { symbol: "usdt", name: "Tether", current_price: 0.9993, market_cap: 184e9 },
+    { symbol: "usdc", name: "USD Coin", current_price: 1.0001, market_cap: 61e9 },
+    { symbol: "dai", name: "Dai", current_price: 0.9998, market_cap: 5e9 },
+    { symbol: "usde", name: "Ethena USDe", current_price: 1.0007, market_cap: 5e9 },
+    { symbol: "fdusd", name: "First Digital", current_price: 0.9975, market_cap: 2e9 }
+  ];
+  var DEMO_TOKEN = { usdc: { holders_count: "4089307", total_supply: "212230092792198791" }, eurc: { holders_count: "1522855", total_supply: "2000963844381451640" } };
+  var DEMO_HOLDERS = [
+    { value: "167439496691827407", address: { hash: "0x4E42177AB52202Ced872A5EF661dfc4794bB37bF" } },
+    { value: "23028666700436568", address: { hash: "0x591e17159fB5385bDC254Af2997554303F844cc7" } },
+    { value: "9999934971296399", address: { hash: "0xF192691256Ad47EE5d4033d6979cDAeA23180Ad8" } },
+    { value: "8999899729535560", address: { hash: "0x57414adbBbc4BBA36f1dE26b2dc1648b28ae7799" } },
+    { value: "999999733774803", address: { hash: "0x4f1c3a0359A7fAd8Fa8E9E872F7C06dAd97C91Fd" } }
+  ];
+  var DEMO_STATS = { gas_used_today: "243960925827", gas_prices: { average: 23.45 }, transactions_today: "1530343", average_block_time: 500, total_transactions: "613758956", total_addresses: "45023830", network_utilization_percentage: 4.67 };
+  var DEMO_TXS = [{ hash: "0x70819479e82ad3ca470130ac2613c671774b6d17ae498d9843be75f37804786b", method: "swap", fee: { value: "3071960320000000" } }];
+  var DEMO_FX = [   // shaped like tradeView() output; real observed USDC<->QCAD trades
+    { id: 476, bSym: "QCAD", qSym: "USDC", baseF: 444.1, feeF: 0.2, execRate: 0.7098, mid: 0.7131, bps: -46, notionalUSD: 316.8, status: 2 },
+    { id: 475, bSym: "USDC", qSym: "QCAD", baseF: 222.1, feeF: 0.2, execRate: 1.4142, mid: 1.4023, bps: 85, notionalUSD: 222.1, status: 2 },
+    { id: 474, bSym: "USDC", qSym: "QCAD", baseF: 1000.0, feeF: 0.2, execRate: 1.4009, mid: 1.4023, bps: -10, notionalUSD: 1000.0, status: 2 },
+    { id: 470, bSym: "USDC", qSym: "QCAD", baseF: 500.1, feeF: 0.2, execRate: 1.3964, mid: 1.4023, bps: -42, notionalUSD: 500.1, status: 1 }
+  ];
+
+  $("foot").innerHTML = "Arc Testnet · chain 5042002 · explorer <a href='" + ARC_WEB + "' target='_blank' rel='noopener'>testnet.arcscan.app</a> (Blockscout). " +
+    "Peg Watch = CoinGecko mainnet prices. Whale Map & Gas $ = live from Arc's own chain. " +
+    "Gas is quoted in real dollars because Arc pays gas in USDC. No other major L1 can do that without a price feed.";
+
+  // ---------- boot ----------
+  setAuto("gas", true);   // gas auto-refresh on by default (matches the checked box)
+  switchMode("peg");
+})();
+</script>
+</body>
+</html>
