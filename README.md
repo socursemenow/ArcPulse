@@ -31,7 +31,7 @@ No install, no `npm`:
 
 ```bash
 npx serve .
-# then open stablecoin_peg_watch.html
+# then open index.html (served at the root URL)
 ```
 
 Or open the file with the **Live Server** VS Code extension. Every tab has a labeled demo-data fallback if an API is unreachable, so it always renders.
@@ -40,7 +40,7 @@ Or open the file with the **Live Server** VS Code extension. Every tab has a lab
 
 ## How it works (tech)
 
-- **Single-file app**: plain HTML + CSS + vanilla JS in `stablecoin_peg_watch.html`, scoped under `#peg-watch-root`, one IIFE, zero dependencies.
+- **Single-file app**: plain HTML + CSS + vanilla JS in `index.html`, scoped under `#peg-watch-root`, one IIFE, zero dependencies.
 - **Reads Arc directly**: Blockscout REST API for holders/txs/stats, and JSON-RPC for contract reads.
 - **StableFX tape** decodes `getTradeDetails()` from the `FxEscrow` contract. All trades on a page are fetched in **one `eth_call` via Multicall3** (canonical address, deployed on Arc) so it never trips the public RPC's rate limit, at any page size.
 - **BigInt math** for holder balances (they exceed JS's safe-integer range); percentages are decimal-agnostic.
